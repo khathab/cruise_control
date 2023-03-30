@@ -44,6 +44,7 @@ int acc(){
 int main(void){
 	
     DisplayHex();
+    //Hello
 	// Main loop to keep program running
 	while (1){
 		// Second loop to check if switch is on
