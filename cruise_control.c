@@ -160,7 +160,7 @@ int main()
             time_of_flight = timer_time_passed(max_duration);
             distance = calculate_distance(time_of_flight);
             displayValues[0] = distance;
-            
+            state = 0;
         }
 
         if(timer_is_timed_out()==1){
