@@ -13,10 +13,10 @@
 #define HEX0_HEX3_BASE 0xFF200020
 #define HEX4_HEX5_BASE 0xFF200030
 
-volatile unsigned int *const switchPointer = (unsigned int *)SW_BASE;
-volatile unsigned int *const buttonPointer = (unsigned int *)BUTTON_BASE;
+volatile unsigned int* switchPointer = (unsigned int *)SW_BASE;
+volatile unsigned int* buttonPointer = (unsigned int *)BUTTON_BASE;
 
-volatile unsigned int *const hexPointer[2] = {HEX0_HEX3_BASE, HEX4_HEX5_BASE};
+volatile unsigned int* hexPointer[2] = {HEX0_HEX3_BASE, HEX4_HEX5_BASE};
 
 unsigned char hexCode[16] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7C, 0x7, 0x7F, 0x67, 0x77, 0x7C, 0x39, 0x5E, 0x79, 0x71};
 
@@ -142,7 +142,7 @@ int main()
 
     if(state ==0){
     // sends trigger signal of ultrasonic
-        if(timer_reset_timeout==1){
+        if(timer_is_timed_out()==1){
         //waits for timer to finish 10us count
             timer_reset_timeout();
             ultrasonic_set_low();
@@ -155,14 +155,14 @@ int main()
         
     }else if(state ==1){
     // waits and listens for echo
-        if(ultrasonic_read == 1){
+        if(ultrasonic_read() == 1){
             time_of_flight = timer_time_passed(max_duration);
             distance = calculate_distance(time_of_flight);
             displayValues[0] = distance;
             DisplayHex();
         }
 
-        if(timer_is_timed_out==1){
+        if(timer_is_timed_out()==1){
             //no ultrasonic reading, reset
             timed_out=1;
         }
