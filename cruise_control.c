@@ -155,9 +155,9 @@ int main()
             //Only need lowest 12 bits
             value &= 0xFFF;
             // Set vehicle speed
-			displayValues[0] = value * 100/4096 * 99/100;
+			displayValues[1] = value * 100/4096 * 99/100;
         DisplayHex();
-        if(state ==0){
+    if(state ==0){
     // sends trigger signal of ultrasonic
         if(timer_is_timed_out()==1){
         //waits for timer to finish 10us count
@@ -182,6 +182,7 @@ int main()
         if(timer_is_timed_out()==1){
             //no ultrasonic reading, reset
             timed_out=1;
+            state =0;
         }
 
         if(timed_out==1){
