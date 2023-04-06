@@ -101,7 +101,7 @@ void ultrasonic_set_high(){
 }
 
 void ultrasonic_set_low(){
-    ULTRASONIC |= 0;
+    ULTRASONIC &= ~(1 << 0);
 }
 
 int ultrasonic_read(){
@@ -138,7 +138,7 @@ int main()
     int max_duration = 0xFFFFFFFF; // stores max timer duration
     int time_of_flight = 0; // stores time of flight for detected distance
     int distance = 0; //stores distance calculation
-
+    ultrasonic_init();
     while (1){
         DisplayHex();
         if(state ==0){
