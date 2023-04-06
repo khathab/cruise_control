@@ -139,8 +139,9 @@ int main()
     int time_of_flight = 0; // stores time of flight for detected distance
     int distance = 0; //stores distance calculation
 
-
-    if(state ==0){
+    while (1){
+        DisplayHex();
+        if(state ==0){
     // sends trigger signal of ultrasonic
         if(timer_is_timed_out()==1){
         //waits for timer to finish 10us count
@@ -159,7 +160,7 @@ int main()
             time_of_flight = timer_time_passed(max_duration);
             distance = calculate_distance(time_of_flight);
             displayValues[0] = distance;
-            DisplayHex();
+            
         }
 
         if(timer_is_timed_out()==1){
@@ -175,5 +176,7 @@ int main()
         
     }
 
+    }
+    
     return 0;
 }
