@@ -13,10 +13,12 @@
 #define HEX0_HEX3_BASE 0xFF200020
 #define HEX4_HEX5_BASE 0xFF200030
 
-volatile unsigned int* switchPointer = (unsigned int *)SW_BASE;
-volatile unsigned int* buttonPointer = (unsigned int *)BUTTON_BASE;
+#define ADC_BASE 0xFF204000
 
-volatile unsigned int* hexPointer[2] = {HEX0_HEX3_BASE, HEX4_HEX5_BASE};
+volatile unsigned int *const switchPointer = (unsigned int *)SW_BASE;
+volatile unsigned int *const buttonPointer = (unsigned int *)BUTTON_BASE;
+volatile unsigned int *const hexPointer[2] = {HEX0_HEX3_BASE, HEX4_HEX5_BASE};
+volatile unsigned int *const ADC_ptr = (unsigned int *)ADC_BASE;
 
 unsigned char hexCode[16] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7C, 0x7, 0x7F, 0x67, 0x77, 0x7C, 0x39, 0x5E, 0x79, 0x71};
 
@@ -129,6 +131,9 @@ void DisplayHex(){
 
 int main()
 {
+    
+    
+    
     //ultrasonic has two states
         //trig which sends a signal for 10us
         //echo which waits to receive signal
@@ -140,6 +145,17 @@ int main()
     int distance = 0; //stores distance calculation
     ultrasonic_init();
     while (1){
+        	displayValues[1] = 20;
+			displayValues[2] = 60;
+
+            // Read from potentiometer
+            ADC_ptr[0] = 0x1; //Refresh channel
+            // Read current ADC value (channel 0)
+            volatile int value = ADC_ptr[0];
+            //Only need lowest 12 bits
+            value &= 0xFFF;
+            // Set vehicle speed
+			displayValues[0] = value * 100/4096 * 99/100;
         DisplayHex();
         if(state ==0){
     // sends trigger signal of ultrasonic
