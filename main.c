@@ -5,6 +5,18 @@
 #define HEX4_HEX5_BASE 0xFF200030
 #define I2C0_BASE 0xFFC04000 // Base address of the first I2C controller
 
+#define TIMER_BASE_ADDR   0xFFFEC600
+#define TIMER_LOAD        (*((volatile int*)(TIMER_BASE_ADDR + 0x00)))
+#define TIMER_COUNTER     (*((volatile int*)(TIMER_BASE_ADDR + 0x04)))
+#define TIMER_CONTROL     (*((volatile int*)(TIMER_BASE_ADDR + 0x08)))
+#define TIMER_INTERRUPT   (*((volatile int*)(TIMER_BASE_ADDR + 0x0C)))
+
+#define JP1_BASE    0xFF200060
+#define ULTRASONIC (*((volatile int*)(JP1_BASE + 0x00)))
+#define ULTRASONIC_CONTROL (*((volatile int*)(JP1_BASE + 0x04)))
+
+#define ADC_BASE 0xFF204000
+
 //---------- PRE FUNCTION DECLERATION ----------
 void displayHex();
 int checkSwitches();
@@ -76,51 +88,107 @@ unsigned char displayValues[3] = {0, 0, 0};
 
 unsigned char accelerometerData;
 
-//---------- MAIN FUNCTION ----------
-int main(void){
+volatile unsigned int *const ADC_ptr = (unsigned int *)ADC_BASE;
+
+
+/**
+ * @brief starts the timer and counts down for a duration of time
+ * 
+ * @param duration_microseconds // duration of time timer counts down
+ */
+void timer_init(int duration_microseconds){
+    int time_load_value = (duration_microseconds * 200) -1; 
+    // max time is 21.47 s
+    TIMER_LOAD = time_load_value;
+    TIMER_CONTROL |= (1<<0); //turn on timer
+    TIMER_CONTROL |= (1<<2); //enable interrupts
+
+} 
+
+/**
+ * @brief checks if timer has timed out
+ * 
+ * @return true 
+ * @return false 
+ */
+int timer_is_timed_out(){
+    int interrupt_status = TIMER_INTERRUPT;
+    if (interrupt_status == 1){
+        return 1;
+    }else{
+        return 0;
+    }
+}
+
+/**
+ * @brief stops timer
+ * 
+ */
+void timer_stop(){
+    TIMER_CONTROL &= ~(1 << 0); //sets first bit to zero, masks by 0x1110
+}
+
+/**
+ * @brief resets interrupt and stops timer
+ * 
+ */
+void timer_reset_timeout(){
+    TIMER_INTERRUPT = 1; //resets interrupt bit (kinda confusing, but you set to 1 not zero to reset)
+    timer_stop();
+}
+
+/**
+ * @brief checks the time passed
+ * 
+ * @param timeout_period 
+ * @return uint32_t 
+ */
+int timer_time_passed(int timeout_period){
+    int current_tick_count = TIMER_COUNTER; //gets tick value in timer
+    int elapsed_ticks = (timeout_period/200) - current_tick_count; //converts time in microseconds to ticks, calculates tick delta
+    int elapsed_time_us = elapsed_ticks*200;
+    return elapsed_time_us;
+}
+
+int timer_is_timed_out2(int timeout_period, int timeout_threshold){
+    int current_tick_count = TIMER_COUNTER; //gets tick value in timer
+    int elapsed_ticks = (timeout_period/200) - current_tick_count; //converts time in microseconds to ticks, calculates tick delta
+    int elapsed_time_us = elapsed_ticks*200;
 	
-    displayHex();
-
-    // Initialize I2C0 controller
-    initI2C();
-
-    /* ADXL345 Accelerometer Documantation
-        Memory Map:
-            Device ID(DEVID): 0x00
-            DEVID holds a fixed value of 0xE5
-    */
-	if (readOverI2C(0x00) != 0xE5 ){
-		// Dead loop
-		while(1){}
-	}
-
-    // Initialize accelerometer with I2C
-    initAccelerometer();
-
-	// Main loop to keep program running
-	while (1){
-		// Second loop to check if switch is on
-		while (checkSwitches()){
-            /*ADXL345 Accelerometer Documantation:
-
-                Register 0x30 - INT_SOURCE:
-                |-----------------------------------------------------------------------------------------------|
-                |    D7            D6          D5          D4          D3           D2          D1         D0   |
-                |DATA_READY   SINGLE_TAP   DOUBLE_TAP   Activity   Inactivity    FREE_FALL   Watermark   Overrun|
-                |-----------------------------------------------------------------------------------------------|
-            */
-
-            // Register: 0x30, Reading: 0b10000000 = 0x08
-            if (readOverI2C(0x30) >= 0x80){
-                // Register: 0x32, Reading a byte from DATAX0
-                accelerometerData = readOverI2C(0x32);
-                displayValues[2] = accelerometerData;
-		    }
-
-			displayHex();
-		}
+	if(elapsed_time_us < timeout_threshold){
+		return 1;
+	}else{
+		return 0;
 	}
 }
+
+void ultrasonic_init(){
+    ULTRASONIC_CONTROL |= (1<<0);
+    ULTRASONIC_CONTROL |= (0<<1);
+    
+}
+
+
+int calculate_distance(int time_microseconds){
+    return time_microseconds * 0.034 /2;
+}
+
+
+void ultrasonic_set_high(){
+    ULTRASONIC |=1;
+}
+
+void ultrasonic_set_low(){
+    ULTRASONIC &= ~(1 << 0);
+}
+
+int ultrasonic_read(){
+    return (ULTRASONIC & 0b10);
+}
+
+
+
+
 
 //---------- HEX DISPLAY FUNCTION ----------
 // Display needed information on the dash (7-seg displays)
@@ -282,4 +350,104 @@ void initAccelerometer(){
 	// Configure accelerometer to start measuring
     // Register: 0x2D, Sending: 0b00001000 = 0x08
 	writeOverI2C(0x2D, 0x08);
+}
+
+
+//---------- MAIN FUNCTION ----------
+int main(void){
+	
+    displayHex();
+
+    // Initialize I2C0 controller
+    initI2C();
+
+    /* ADXL345 Accelerometer Documantation
+        Memory Map:
+            Device ID(DEVID): 0x00
+            DEVID holds a fixed value of 0xE5
+    */
+	if (readOverI2C(0x00) != 0xE5 ){
+		// Dead loop
+		while(1){}
+	}
+
+    // Initialize accelerometer with I2C
+    initAccelerometer();
+	
+    int state = 0; //stores state of "state-machine"
+    int timed_out = 1; //stores if timer has timed out
+    int max_duration = 0xFFFFFFFF; // stores max timer duration
+    int max_threshold = 0xFFFFFF;
+    int time_of_flight = 0; // stores time of flight for detected distance
+    int distance = 0; //stores distance calculation
+    ultrasonic_init();
+   
+	// Main loop to keep program running
+	while (1){
+		// Read from potentiometer
+		ADC_ptr[0] = 0x1; //Refresh channel
+		// Read current ADC value (channel 0)
+		volatile int value = ADC_ptr[0];
+		//Only need lowest 12 bits
+		value &= 0xFFF;
+		// Set vehicle speed
+		displayValues[1] = value * 100/4096 * 99/100;
+		// Second loop to check if switch is on
+		while (checkSwitches()){
+            /*ADXL345 Accelerometer Documantation:
+
+                Register 0x30 - INT_SOURCE:
+                |-----------------------------------------------------------------------------------------------|
+                |    D7            D6          D5          D4          D3           D2          D1         D0   |
+                |DATA_READY   SINGLE_TAP   DOUBLE_TAP   Activity   Inactivity    FREE_FALL   Watermark   Overrun|
+                |-----------------------------------------------------------------------------------------------|
+            */
+
+            // Register: 0x30, Reading: 0b10000000 = 0x08
+            if (readOverI2C(0x30) >= 0x80){
+                // Register: 0x32, Reading a byte from DATAX0
+                accelerometerData = readOverI2C(0x32);
+                displayValues[2] = accelerometerData;
+		    }
+
+			displayHex();
+		}
+        
+		if(state ==0){
+			displayValues[1] = 0;
+		// sends trigger signal of ultrasonic
+			if(timer_is_timed_out()==1){
+			//waits for timer to finish 10us count
+				timer_reset_timeout();
+				ultrasonic_set_low();
+				state =1;
+			}else{
+			//sets counter to 10us count
+				ultrasonic_set_high();
+				timer_init(10);
+			}
+			
+		}else if(state ==1){
+        displayValues[1] = 11;
+    // waits and listens for echo
+			if(ultrasonic_read() == 1){
+				time_of_flight = timer_time_passed(max_duration);
+				distance = calculate_distance(time_of_flight);
+				displayValues[0] = distance;
+				state = 0;
+			}
+
+			if(timer_is_timed_out2(max_duration, max_threshold)==1){
+				//no ultrasonic reading, reset
+				timed_out=1;
+				state =0;
+			}
+
+			if(timed_out==1){
+				//start timer count
+				timer_init(max_duration);
+				timed_out =0;
+			}
+		}
+	
 }
