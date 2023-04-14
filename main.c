@@ -5,28 +5,19 @@
 #define HEX4_HEX5_BASE 0xFF200030
 #define I2C0_BASE 0xFFC04000 // Base address of the first I2C controller
 
-#define TIMER_BASE_ADDR   0xFFFEC600
-#define TIMER_LOAD        (*((volatile int*)(TIMER_BASE_ADDR + 0x00)))
-#define TIMER_COUNTER     (*((volatile int*)(TIMER_BASE_ADDR + 0x04)))
-#define TIMER_CONTROL     (*((volatile int*)(TIMER_BASE_ADDR + 0x08)))
-#define TIMER_INTERRUPT   (*((volatile int*)(TIMER_BASE_ADDR + 0x0C)))
+#define TIMER_BASE_ADDR 0xFFFEC600
+#define TIMER_LOAD (*((volatile int*)(TIMER_BASE_ADDR + 0x00)))
+#define TIMER_COUNTER (*((volatile int*)(TIMER_BASE_ADDR + 0x04)))
+#define TIMER_CONTROL (*((volatile int*)(TIMER_BASE_ADDR + 0x08)))
+#define TIMER_INTERRUPT (*((volatile int*)(TIMER_BASE_ADDR + 0x0C)))
 
-#define JP1_BASE    0xFF200060
+#define JP1_BASE 0xFF200060
 #define ULTRASONIC (*((volatile int*)(JP1_BASE + 0x00)))
 #define ULTRASONIC_CONTROL (*((volatile int*)(JP1_BASE + 0x04)))
 
 #define ADC_BASE 0xFF204000
 
-//---------- PRE FUNCTION DECLERATION ----------
-void displayHex();
-int checkSwitches();
-void initI2C();
-unsigned char readOverI2C(unsigned char address);
-void writeOverI2C(unsigned char address, unsigned char value);
-void initAccelerometer();
-
 //---------- STRUCTURES ----------
-
 typedef struct I2CStruct
 {
 	// "pad" Variables used to proper align varibles with there proper memory locations
@@ -185,10 +176,6 @@ void ultrasonic_set_low(){
 int ultrasonic_read(){
     return (ULTRASONIC & 0b10);
 }
-
-
-
-
 
 //---------- HEX DISPLAY FUNCTION ----------
 // Display needed information on the dash (7-seg displays)
@@ -384,16 +371,17 @@ int main(void){
    
 	// Main loop to keep program running
 	while (1){
-		// Read from potentiometer
-		ADC_ptr[0] = 0x1; //Refresh channel
-		// Read current ADC value (channel 0)
-		volatile int value = ADC_ptr[0];
-		//Only need lowest 12 bits
-		value &= 0xFFF;
-		// Set vehicle speed
-		displayValues[1] = value * 100/4096 * 99/100;
 		// Second loop to check if switch is on
-		while (checkSwitches()){
+		if (checkSwitches()){
+            // Read from potentiometer
+            ADC_ptr[0] = 0x1; //Refresh channel
+            // Read current ADC value (channel 0)
+            volatile int value = ADC_ptr[0];
+            //Only need lowest 12 bits
+            value &= 0xFFF;
+            // Set vehicle speed
+            displayValues[1] = value * 100/4096 * 99/100;
+
             /*ADXL345 Accelerometer Documantation:
 
                 Register 0x30 - INT_SOURCE:
@@ -410,45 +398,44 @@ int main(void){
                 displayValues[2] = accelerometerData;
 		    }
 
+            if(state == 0){
+                    displayValues[1] = 0;
+                    // sends trigger signal of ultrasonic
+                    if(timer_is_timed_out()==1){
+                    //waits for timer to finish 10us count
+                        timer_reset_timeout();
+                        ultrasonic_set_low();
+                        state =1;
+                    }else{
+                    //sets counter to 10us count
+                        ultrasonic_set_high();
+                        timer_init(10);
+                    }
+                    
+                }else if(state ==1){
+                    displayValues[1] = 11;
+                    // waits and listens for echo
+                    if(ultrasonic_read() == 1){
+                        time_of_flight = timer_time_passed(max_duration);
+                        distance = calculate_distance(time_of_flight);
+                        displayValues[0] = distance;
+                        state = 0;
+                    }
+
+                    if(timer_is_timed_out2(max_duration, max_threshold)==1){
+                        //no ultrasonic reading, reset
+                        timed_out=1;
+                        state =0;
+                    }
+
+                    if(timed_out==1){
+                        //start timer count
+                        timer_init(max_duration);
+                        timed_out =0;
+                    }
+                }
+            }
 			displayHex();
 		}
-        
-		if(state ==0){
-			displayValues[1] = 0;
-		// sends trigger signal of ultrasonic
-			if(timer_is_timed_out()==1){
-			//waits for timer to finish 10us count
-				timer_reset_timeout();
-				ultrasonic_set_low();
-				state =1;
-			}else{
-			//sets counter to 10us count
-				ultrasonic_set_high();
-				timer_init(10);
-			}
-			
-		}else if(state ==1){
-        displayValues[1] = 11;
-    // waits and listens for echo
-			if(ultrasonic_read() == 1){
-				time_of_flight = timer_time_passed(max_duration);
-				distance = calculate_distance(time_of_flight);
-				displayValues[0] = distance;
-				state = 0;
-			}
-
-			if(timer_is_timed_out2(max_duration, max_threshold)==1){
-				//no ultrasonic reading, reset
-				timed_out=1;
-				state =0;
-			}
-
-			if(timed_out==1){
-				//start timer count
-				timer_init(max_duration);
-				timed_out =0;
-			}
-		}
-	}
 	return 0;
 }
