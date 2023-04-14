@@ -100,7 +100,7 @@ int main(void){
 	// Main loop to keep program running
 	while (1){
 		// Second loop to check if switch is on
-		while (checkSwitches()){
+		if (checkSwitches()){
             /*ADXL345 Accelerometer Documantation:
 
                 Register 0x30 - INT_SOURCE:
@@ -158,7 +158,7 @@ void initI2C(){
     // Checking if Enable Status Register bit 0 is 0 (disabled) 
 	while (I2C0Pointer->enable_status & 0x1){}
 	
-	// Set Control Register bits as 0b0110 0101 = 0x65 (High Speed, 7 Bit Addressing)
+	// Set Control Register bits as 0b0110 0101 = 0x65 (Fast Speed, 7 Bit Addressing)
 	/*
         0 : (nothing, bit reserved)
 	    1 : disable slave
